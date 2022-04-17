@@ -2,6 +2,8 @@ from scipy.integrate import RK45
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import sklearn
+import random
 
 
 # Runge-Kutta
@@ -69,15 +71,32 @@ train_std = train.std()
 train = (train - train_mean) / train_std
 test = (test - train_mean) / train_std
 
-# initialize weights
+# number of neurons
 n_hidden_neurons = 64
+n_connections_in = 12
+n_connections_out = 12
+n_connections_reservoir = 24
+
+# neuron connection indexs
+idx_connections_in = random.sample(set(range(1, n_hidden_neurons+1)), n_connections_in)
+idx_connections_out = random.sample(set(range(1, n_hidden_neurons+1)), n_connections_out)
+idx_connections_reservoir = random.sample(set(range(1, n_hidden_neurons+1)), n_connections_reservoir)
+
 n_inputs = states.shape[1]
-w_ik = np.random.uniform(low=-0.1, high=0.1, size=(n_inputs, n_hidden_neurons))
-w_ij = np.random.uniform(low=-1, high=1, size=(n_hidden_neurons, n_hidden_neurons))
+
+# init weights
+w_in = np.random.uniform(low=-0.1, high=0.1, size=(n_inputs, n_connections_in))
+w_reservoir = np.random.uniform(low=-1, high=1, size=(n_hidden_neurons, n_connections_reservoir))
+# w_out = np.random.uniform(low=-1, high=1, size=(n_connections_out, n_inputs))
 
 # min max normalization
-w_ij = (w_ij-w_ij.min())/(w_ij.max()-w_ij.min())
-print(w_ij.max())
+w_reservoir = (w_reservoir-w_reservoir.min())/(w_reservoir.max()-w_reservoir.min())
+ridge = sklearn.linear_model.Ridge(alpha=0.1)
+
+# find last weights
+x0 = train.iloc[0, :]
+x1 = train.iloc[1, :]
+# ridge.fit(w_reservoir, y)
 
 
 
