@@ -98,6 +98,9 @@ x0 = train.iloc[0, :]
 x1 = train.iloc[1, :]
 # ridge.fit(w_reservoir, y)
 
+# how are all the weights in the reservoir connected?
+# how to find the output weights when ridge regressions depends on the output?
+
 
 
 
