@@ -49,7 +49,7 @@ def data_generator(t0=0.0, t_max=50, step=0.02, plot=False):
 
     # plot
     if plot == True:
-        fig = plt.figure()
+        fig = plt.figure(1)
         ax = fig.add_subplot(111, projection='3d')
         ax.plot(states.loc[:, 'x1'], states.loc[:, 'x2'], states.loc[:, 'x3'])
         plt.draw()
@@ -86,7 +86,7 @@ w_reservoir = (w_reservoir-w_reservoir.min())/(w_reservoir.max()-w_reservoir.min
 
 # reservoir state matrix and targets
 n_initialize = 100  # steps before we start recording states
-R = np.zeros((reservoir_size, train.shape[0] - n_initialize))  # t+1
+R = np.zeros((n_inputs + reservoir_size, train.shape[0] - n_initialize))  # t+1
 y = states.loc[n_initialize+1:train.shape[0], :].T  # t+1 targets
 
 
@@ -106,12 +106,12 @@ for t in range(train.shape[0]):
 
     if t >= n_initialize:
         # update states
-        R[:,t-n_initialize] = r.reshape(reservoir_size,)
+        R[:,t-n_initialize] = np.hstack((x, r.reshape(reservoir_size,)))
 
 
 # train the output by ridge regression
 penalty = 0.1
-w_out = linalg.solve(np.dot(R,R.T) + penalty*np.eye(reservoir_size), np.dot(R,y.T) ).T
+w_out = linalg.solve(np.dot(R,R.T) + penalty*np.eye(n_inputs+reservoir_size), np.dot(R,y.T) ).T
 
 
 # testing
@@ -127,16 +127,26 @@ for t in range(test.shape[0]):
     r += np.tanh(lf)
 
     # outputs
-    o = np.dot(w_out, r)
+    o = np.dot(w_out, np.hstack((x, r.reshape(reservoir_size,))))
     O[:,t] = o.reshape(n_inputs,)
 
     # generative mode:
     x = o.reshape(n_inputs,)
 
     # predictive mode:
-    # x = data[train.shape[0]+t+1]
+    # x = states.iloc[train.shape[0]+t+1]
 
-print('bajs')
+
+# compute MSE for the first errorLen time steps
+errorLen = 500
+mse = sum(np.square(states.loc[train.shape[0]:train.shape[0]+errorLen-1, 'x1'] - O[0,0:errorLen])) / errorLen
+print('MSE = ' + str( mse ))
+
+#fig, axs = plt.subplots(3)
+#axs[0].plot(test.loc[:, 'x1'])
+#axs[1].plot(O[1, :])
+#axs[2].plot(O[2, :])
+
 # how are all the weights in the reservoir connected?
 # how to find the output weights when ridge regressions depends on the output?
 
