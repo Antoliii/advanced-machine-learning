@@ -80,20 +80,17 @@ n_inputs = n_outputs = states.shape[1]
 w_in = np.random.uniform(low=-0.1, high=0.1, size=(n_inputs, reservoir_size))
 w_reservoir = np.random.uniform(low=-1, high=1, size=(reservoir_size, reservoir_size))
 rho = max(abs(linalg.eig(w_reservoir)[0]))
-
-
 # min max normalization
 w_reservoir = (w_reservoir-w_reservoir.min())/(w_reservoir.max()-w_reservoir.min())
-# ridge = sklearn.linear_model.Ridge(alpha=0.1)
 
 
 # reservoir state matrix and targets
-n_initialize = 100  # steps before we start adjusting weights
-R = np.zeros((reservoir_size, train.shape[0], ))  # t+1
-O = states.loc[1:train.shape[0], :].T  # t+1
+n_initialize = 100  # steps before we start recording states
+R = np.zeros((reservoir_size, train.shape[0] - n_initialize))  # t+1
+y = states.loc[n_initialize+1:train.shape[0], :].T  # t+1 targets
 
 
-# run the reservoir with the data and collect r
+# run the reservoir with the data and collect r states
 r = np.zeros((reservoir_size, 1))
 for t in range(train.shape[0]):
 
@@ -107,15 +104,39 @@ for t in range(train.shape[0]):
     # activation function
     r += np.tanh(lf)
 
+    if t >= n_initialize:
+        # update states
+        R[:,t-n_initialize] = r.reshape(reservoir_size,)
 
-    R[:,t] = np.vstack((1,states.loc[:, t],r))[:,0]
+
+# train the output by ridge regression
+penalty = 0.1
+w_out = linalg.solve(np.dot(R,R.T) + penalty*np.eye(reservoir_size), np.dot(R,y.T) ).T
+
+
+# testing
+O = np.zeros((n_outputs, test.shape[0]))
+x = states.loc[train.shape[0]]  # continue from here
+for t in range(test.shape[0]):
+    # local fields
+    lf_1 = np.dot(x, w_in).reshape((reservoir_size, 1))
+    lf_2 = np.dot(w_reservoir, r)
+    lf = lf_1 + lf_2
+
+    # activation function
+    r += np.tanh(lf)
+
+    # outputs
+    o = np.dot(w_out, r)
+    O[:,t] = o.reshape(n_inputs,)
+
+    # generative mode:
+    x = o.reshape(n_inputs,)
+
+    # predictive mode:
+    # x = data[train.shape[0]+t+1]
 
 print('bajs')
-# find last weights
-# x0 = train.iloc[0, :]
-# x1 = train.iloc[1, :]
-# ridge.fit(w_reservoir, y)
-
 # how are all the weights in the reservoir connected?
 # how to find the output weights when ridge regressions depends on the output?
 
