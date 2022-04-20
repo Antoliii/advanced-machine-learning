@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sklearn
 import random
+from sklearn.linear_model import Ridge, LinearRegression
 
 
 # Runge-Kutta
@@ -35,7 +36,6 @@ def data_generator(y0, t0=0.0, t_max=50, step=0.02, plot=False):
         sol.step()
         states.append(sol.y)
     states = pd.DataFrame(states)
-    states.columns = ['x1', 'x2', 'x3']
 
     # plot
     if plot == True:
@@ -49,7 +49,7 @@ def data_generator(y0, t0=0.0, t_max=50, step=0.02, plot=False):
 
 
 #  some random starting points
-starting_points = 10
+starting_points = 4
 train = pd.DataFrame()
 test = pd.DataFrame()
 for s in range(starting_points):
@@ -68,37 +68,37 @@ for s in range(starting_points):
     train = pd.concat([train, train_])
     test = pd.concat([test, test_])
 
-train.hist(bins=300)
+# plt.figure(1)
+# train.hist(bins=300)
 print(train.describe())
 
 
 # normalize
 train_mean = train.mean()
 train_std = train.std()
-train = (train - train_mean) / train_std
-test = (test - train_mean) / train_std
+train_normalized = (train - train_mean) / train_std
+test_normalized = (test - train_mean) / train_std
 # train = (train-train.min())/(train.max()-train.min())  # min-max
 # test = (test-test.min())/(test.max()-test.min())  # min-max
 
 
-# reservoir size and input/output sizes
-reservoir_size = 400
-n_inputs = n_outputs = states.shape[1]
-
-
-# initialize weights
-def weight_matrix_generation(n_in, n_out, density, connectivity):
-    n = n_in * n_out
+# create weight matrices
+def init_weights(n_in, n_out, density, connectivity):
     r = -(connectivity - 1) + connectivity * np.random.rand(n_in, n_out)
     W = np.random.rand(n_in, n_out) < density
 
     return np.multiply(W, r)
 
+reservoir_size = 100
+density = 0.08
+connectivity = 3
+leak = 0.05
+n_inputs = n_outputs = train.shape[1]
 
 class layer:
     def __init__(self, n_reservoir, n_in, n_out, density, connectivity, leaky_rate=None):
         self.W_in = -.1 + .2 * np.random.rand(n_in, n_reservoir)
-        self.W = weight_matrix_generation(n_reservoir, n_reservoir, density, connectivity)
+        self.W = init_weights(n_reservoir, n_reservoir, density, connectivity)
         scale = 1 / self.W.max()
         self.W = self.W / scale
 
@@ -119,30 +119,40 @@ class layer:
 
         self.x = np.tanh(recursion + inward)
 
-density = 0.08
-connectivity = 3
-leak = 0.05
+
 savelayers = []
 savelayers.append(layer(reservoir_size, n_inputs, reservoir_size, density, connectivity, leak))
 savelayers.append(layer(reservoir_size, reservoir_size, n_outputs, density, connectivity, leak))
 
-X = np.zeros((train.shape[0], reservoir_size))
+n_points = int(n * 0.8)
+start = 0
+stop = n_points
+# states
+R = np.zeros((starting_points*n_points, reservoir_size))
 
 
-layers = savelayers
-for t in train:
-    v = train.loc[:, f'{t}'].T
+for i in range(starting_points*n_points):
+    if i % n_points == 0:
+        layers = savelayers
 
+    v = train_normalized.iloc[i]
     layers[0].update(v)
-
-    for j in  range (1, 2):
-        layers[j].update(layers[j-1].x)
-        bajs = layers[1].x
-        X[i,t] = np.squeeze(layers[1].x)
-
-        print(f'{str(i+1)} of {str(n_paths)} complete')
+    layers[1].update(layers[0].x)
+    R[i, :] = layers[1].x.reshape(reservoir_size,)
 
 
+# output weights
+model = []
+a = R[:, 0].reshape(-1, 1)
+b = train.to_numpy()[:, 0].reshape(-1, 1)
+model1 = Ridge(alpha=0.1).fit(R[:, 0].reshape(-1, 1), train.to_numpy()[:, 0].reshape(-1, 1))
+model2 = Ridge(alpha=0.1).fit(R[:, 1].reshape(-1, 1), train.to_numpy()[:, 1].reshape(-1, 1))
+model3 = LinearRegression().fit(R[:, 2].reshape(-1, 1), train.to_numpy()[:, 2].reshape(-1, 1))
+
+
+
+print('bajs')
+'''
 w_in = np.random.uniform(low=-0.1, high=0.1, size=(n_inputs, reservoir_size)) < density
 connectivity = -(3 - 1) + 3 * np.random.rand(n_inputs, reservoir_size)
 w_in = np.multiply(w_in, connectivity)
@@ -234,7 +244,7 @@ plt.show()
 
 # how are all the weights in the reservoir connected?
 # how to find the output weights when ridge regressions depends on the output?
-
+'''
 
 
 
