@@ -7,12 +7,13 @@ from torch_geometric.transforms import NormalizeFeatures
 from torch_geometric.nn import GCNConv, GATConv
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+import time
 
 
-def visualize(h, color):
+def visualize(axs_, h, color, title_):
     z = TSNE(n_components=2).fit_transform(h.detach().cpu().numpy())
-    plt.scatter(z[:, 0], z[:, 1], s=50, c=color, cmap="Set2")
-    plt.show()
+    axs_.scatter(z[:, 0], z[:, 1], s=4, c=color, cmap='Set2')
+    axs_.set_title(title_)
 
 
 dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())
@@ -61,7 +62,7 @@ class GCN(torch.nn.Module):
         return x
 
 
-# semi supervised graph attention network
+# semi-supervised graph attention network
 class GAT(torch.nn.Module):
     def __init__(self, hidden_channels, heads, dropout):
         super().__init__()
@@ -116,13 +117,17 @@ semiSupervised = dict(zip([modelNN, modelGCN, modelGAT], [False, True, True]))
 
 
 # early stop
+r = 0
+fig, axs = plt.subplots(3, 2)
 for model in models:
     previousLoss = 1e6
     n = 0
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    losses = []
     for epoch in range(1, 999):
         newLoss, model, optimizer = train(model_=model, semi_supervised=semiSupervised[model], optimizer_=optimizer)
+        losses.append(newLoss.item())
         if previousLoss <= newLoss.item():
             print(f'Model: {model.__class__.__name__}, Epoch: {epoch:03d}, Loss: {previousLoss:.4f}')
 
@@ -131,9 +136,22 @@ for model in models:
             if n == 10:
                 testAcc = test(model, semi_supervised=semiSupervised[model])
                 print(f'Model: {model.__class__.__name__}, Test accuracy: {100*testAcc:.2f}%\n')
+                time.sleep(1)
                 break
         else:
             n = 0
             previousLoss = newLoss.item()
 
-#visualize(model(data.x), color=data.y)
+    # visualize
+    if not semiSupervised[model]:
+
+        visualize(axs_=axs[r, 0], h=model(data.x), color=data.y, title_=model.__class__.__name__)
+        axs[r, 1].plot(losses)
+        axs[r, 1].set_title('Loss')
+    else:
+        visualize(axs_=axs[r, 0], h=model(data.x, data.edge_index), color=data.y, title_=model.__class__.__name__)
+        axs[r, 1].plot(losses)
+        axs[r, 1].set_title('Loss')
+    r += 1
+plt.subplots_adjust(hspace=0.4)
+plt.show()
