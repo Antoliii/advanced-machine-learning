@@ -137,7 +137,3 @@ for model in models:
             previousLoss = newLoss.item()
 
 #visualize(model(data.x), color=data.y)
-
-
-
-
