@@ -4,11 +4,11 @@ from numpy.linalg import inv
 from scipy.integrate import RK45
 
 # parameters
-N = 500  # reservoir neurons
-WInputVariance = 0.002
+N = 2000  # reservoir neurons
+WInputVariance = 0.02
 WVariance = 2 / N
 k = 0.1  # ridge parameter
-predictionTimeSteps = 1000
+tDelta = 0.02
 
 
 # Runge-Kutta
@@ -49,83 +49,81 @@ def data_generator(y0, t0=0.0, t_max=50, step=0.02, plot=False):
 
     return states, n
 
+
+# ridge regression
+def calculate_output_weights(R_):
+    stopExplode = k * np.identity(N)
+    WOutput = np.dot(np.dot(trainingData, R_.T), inv(np.dot(R_, R_.T) + stopExplode))
+    return WOutput
+
+
 # 1D and 3D cases
-for i in range(2):
+for i in range(1):
 
     # 1D
     if i == 0:
+        fig = plt.figure(1)
+        outputNeurons = 1
 
-    # get data
-    states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=0.02, plot=False)
-outputNeurons = 1
-trainingData = states[0:int(n * 0.8), 0].T  # 80%
-testData = states[int(n * 0.8):, 0].T  # 20%
-trainingTimeSteps = max(trainingData.shape)
-testTimeSteps = max(testData.shape)
+        # loop over all 3 variables
+        for x in range(3):
 
+            # get data
+            states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=tDelta, plot=False)
+            trainingData = states[0:int(n * 0.8), x].T  # 80%
+            testData = states[int(n * 0.8):, x].T  # 20%
+            trainingTimeSteps = max(trainingData.shape)
+            testTimeSteps = max(testData.shape)
 
-# initialize weights and reservoir
-W = np.random.normal(loc=0, scale=WVariance**0.5, size=(N, N))
-WInput = np.random.normal(loc=0, scale=WInputVariance**0.5, size=(N, outputNeurons))
-R = np.zeros((N, trainingTimeSteps))  # reservoir
+            # initialize weights and reservoir
+            W = np.random.normal(loc=0, scale=WVariance**0.5, size=(N, N))
+            WInput = np.random.normal(loc=0, scale=WInputVariance**0.5, size=(N, outputNeurons))
+            R = np.zeros((N, trainingTimeSteps+testTimeSteps))  # reservoir
 
-# feed training data
-for t in range(trainingTimeSteps):
-    b = np.zeros((N, 2))  # local field b
-    b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+            # feed training data
+            for t in range(trainingTimeSteps-1):
+                b = np.zeros((N, 2))  # local field b
+                b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+                b[:, 1] = np.dot(WInput, trainingData[t]).T.reshape(N, )
 
-    # bug fix
-    if outputNeurons == 1:
-        b[:, 1] = np.dot(WInput, trainingData[t]).T.reshape(N, )
-    else:
-        b[:, 1] = np.dot(WInput, trainingData[:, t]).T.reshape(N, )
+                # update
+                R[:, t + 1] = np.tanh(np.sum(b, axis=1))
 
-    # update
-    if t < trainingTimeSteps - 1:
-        R[:, t + 1] = np.tanh(np.sum(b, axis=1))
-
-# ridge regression
-stopExplode = k * np.identity(N)
-WOutput = np.dot(np.dot(trainingData, R.T), inv(np.dot(R, R.T) + stopExplode))
-
-# feed test data
-result = np.zeros((outputNeurons, testTimeSteps + predictionTimeSteps))
-for t in range(testTimeSteps + predictionTimeSteps):
-
-    if t >= testTimeSteps:
-        stepResult = np.dot(WOutput, R[:, t])
-
-        b = np.zeros((N, 2))
-        b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
-        b[:, 1] = np.dot(WInput, stepResult).T.reshape(N, )
-
-        # update
-        if t < (testTimeSteps + predictionTimeSteps - 1):
-            R[:, t + 1] = np.tanh(np.sum(b, axis=1))
-
-        result[:, t] = stepResult
+            # output weights
+            WOutput = calculate_output_weights(R_=R[:, 0:trainingTimeSteps])
 
 
-    else:
-        b = np.zeros((N, 2))
-        b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+            result = np.zeros((outputNeurons, testTimeSteps))
 
-        # bug fix
-        if outputNeurons == 1:
-            b[:, 1] = np.dot(WInput, testData[t]).T.reshape(N, )
-        else:
-            b[:, 1] = np.dot(WInput, testData[:, t]).T.reshape(N, )
+            # testing
+            n = 0
+            for t in range(trainingTimeSteps-1, trainingTimeSteps+testTimeSteps-1):
 
-        # update
-        R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+                # predict
+                stepResult = np.dot(WOutput, R[:, t])
+                b = np.zeros((N, 2))
+                b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+                b[:, 1] = np.dot(WInput, stepResult).T.reshape(N, )
 
-        # bug fix
-        if outputNeurons == 1:
-            result[:, t] = testData[t]
-        else:
-            result[:, t] = testData[:, t]
+                # update
+                R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+                result[:, n] = stepResult
+                n += 1
 
 
+            # plot 1D
+            lyapunovTimes = 0.906*np.linspace(0, testTimeSteps*tDelta, testTimeSteps)
+            plt.subplot(3, 1, x+1).plot(lyapunovTimes, testData, color='blue')
+            plt.subplot(3, 1, x+1).plot(lyapunovTimes, result.reshape(testTimeSteps, ), color='orange')
+            plt.title(f'Max W_output: {round(max(WOutput), 2)}')
+            plt.xlabel('λt')
+            plt.ylabel(f'x{x+1}')
+        plt.subplots_adjust(hspace=0.6)
+        plt.show()
+
+
+
+'''
 # plot
 if outputNeurons == 1:
     fig = plt.figure()
@@ -154,3 +152,4 @@ else:
     ax2.plot3D(trainingData[0, :predictionTimeSteps], trainingData[1, :predictionTimeSteps], trainingData[2, :predictionTimeSteps], 'blue')
     ax2.title.set_text(f'Training data {predictionTimeSteps} time steps')
     plt.show()
+'''
