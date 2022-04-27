@@ -1,16 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy.linalg import inv
+import scipy
 from scipy.integrate import RK45
 
 # parameters
-N = 1800  # reservoir neurons
+N = 800  # reservoir neurons
 WInputVariance = 0.002
 WVariance = 1.2 / N
 k = 0.01  # ridge parameter
 tDelta = 0.02
 tMax = 50
-runs = 50
+runs = 100
 
 
 # Runge-Kutta
@@ -80,8 +81,8 @@ for i in range(1):
             lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
 
             # repeat a few times
-            Hs = []
-            WOutputs = []
+            MSEs = []
+            Ws = []
             for r in range(runs):
 
                 # initialize weights and reservoir
@@ -121,22 +122,23 @@ for i in range(1):
                 result = result.reshape(testTimeSteps, )
 
                 # energy function
-                H = np.mean((testData[:250]-result[:250])**2)
-                print(f'run {r+1} done, H: {round(H, 0)}, W_output: {round(max(WOutput), 2)}')
+                MSE = np.mean((testData-result)**2)
+                singularValues = scipy.linalg.svdvals(W)
+                print(f'run {r+1} done, MSE: {round(MSE, 0)}, W: {round(singularValues[0], 2)}')
 
                 # store
-                Hs.append(H)
-                WOutputs.append(max(WOutput))
+                MSEs.append(MSE)
+                Ws.append(singularValues[0])
 
 
             # plot 1D
             plt.subplot(3, 2, 2*(x+1)-1).plot(lyapunovTimes, testData, color='blue')
             plt.subplot(3, 2, 2*(x+1)-1).plot(lyapunovTimes, result, color='orange')
-            plt.title(f'X{x+1}, Max W_output: {round(max(WOutput), 2)}')
+            plt.title(f'X{x+1}, Max W: {round(singularValues[0], 2)}')
             plt.xlabel('λt')
-            plt.subplot(3, 2, 2*(x+1)).scatter(WOutputs, Hs)
-            plt.title(f'X{x+1}, MSE as a function of log(W_output)')
-            plt.xlabel('Max W_output')
+            plt.subplot(3, 2, 2*(x+1)).scatter(Ws, MSEs)
+            plt.title(f'X{x+1}, MSE as a function of log(W)')
+            plt.xlabel('Max W')
             plt.ylabel('MSE')
             plt.xscale('log')
 
