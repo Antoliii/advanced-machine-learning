@@ -4,7 +4,7 @@ from numpy.linalg import inv
 from scipy.integrate import RK45
 
 # parameters
-N = 200  # reservoir neurons
+N = 500  # reservoir neurons
 WInputVariance = 0.02
 WVariance = 2 / N
 k = 0.1  # ridge parameter
@@ -69,6 +69,8 @@ for i in range(1):
         for x in range(3):
 
             # repeat a few times
+            Hs = []
+            WOutputs = []
             for r in range(10):
 
                 # get data
@@ -116,72 +118,80 @@ for i in range(1):
                 result = result.reshape(testTimeSteps, )
 
                 # energy function
-                H = np.sum(0.5*(testData-result)**2)
+                H = np.mean((testData-result)**2)
                 print(f'run {r+1} done, H: {round(H, 0)}, W_output: {round(max(WOutput), 2)}')
 
+                # store
+                Hs.append(H)
+                WOutputs.append(max(WOutput))
 
-        # plot 1D
-        lyapunovTimes = 0.906*np.linspace(0, testTimeSteps*tDelta, testTimeSteps)
-        plt.subplot(3, 1, x+1).plot(lyapunovTimes, testData, color='blue')
-        plt.subplot(3, 1, x+1).plot(lyapunovTimes, result, color='orange')
-        plt.title(f'Max W_output: {round(max(WOutput), 2)}')
-        plt.xlabel('λt')
-        plt.ylabel(f'x{x+1}')
+
+            # plot 1D
+            lyapunovTimes = 0.906*np.linspace(0, testTimeSteps*tDelta, testTimeSteps)
+            plt.subplot(3, 2, 2*(x+1)-1).plot(lyapunovTimes, testData, color='blue')
+            plt.subplot(3, 2, 2*(x+1)-1).plot(lyapunovTimes, result, color='orange')
+            plt.title(f'Max W_output: {round(max(WOutput), 2)}')
+            plt.xlabel('λt')
+            plt.subplot(3, 2, 2*(x+1)).scatter(WOutputs, Hs)
+            plt.title('Energy function')
+            plt.xlabel('Max W_output')
+            plt.ylabel('H')
+            plt.xscale('log')
 
         plt.subplots_adjust(hspace=0.6)
 
 
-        # 3D
-        if i == 0:
-            fig = plt.figure(2)
-            outputNeurons = 3
+    # 3D
+    if i == 0:
+        # fig = plt.figure(2)
+        outputNeurons = 3
 
-            # get data
-            states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=tDelta, plot=False)
-            trainingData = states[0:int(n * 0.8)].T  # 80%
-            testData = states[int(n * 0.8):].T  # 20%
-            trainingTimeSteps = max(trainingData.shape)
-            testTimeSteps = max(testData.shape)
+        # get data
+        states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=tDelta, plot=False)
+        trainingData = states[0:int(n * 0.8)].T  # 80%
+        testData = states[int(n * 0.8):].T  # 20%
+        trainingTimeSteps = max(trainingData.shape)
+        testTimeSteps = max(testData.shape)
 
-            # initialize weights and reservoir
-            W = np.random.normal(loc=0, scale=WVariance ** 0.5, size=(N, N))
-            WInput = np.random.normal(loc=0, scale=WInputVariance ** 0.5, size=(N, outputNeurons))
-            R = np.zeros((N, trainingTimeSteps + testTimeSteps))  # reservoir
+        # initialize weights and reservoir
+        W = np.random.normal(loc=0, scale=WVariance ** 0.5, size=(N, N))
+        WInput = np.random.normal(loc=0, scale=WInputVariance ** 0.5, size=(N, outputNeurons))
+        R = np.zeros((N, trainingTimeSteps + testTimeSteps))  # reservoir
 
-            # feed training data
-            for t in range(trainingTimeSteps - 1):
-                b = np.zeros((N, 2))  # local field b
-                b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
-                b[:, 1] = np.dot(WInput, trainingData[:, t]).T.reshape(N, )
+        # feed training data
+        for t in range(trainingTimeSteps - 1):
+            b = np.zeros((N, 2))  # local field b
+            b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+            b[:, 1] = np.dot(WInput, trainingData[:, t]).T.reshape(N, )
 
-                # update
-                R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+            # update
+            R[:, t + 1] = np.tanh(np.sum(b, axis=1))
 
-            # output weights
-            WOutput = calculate_output_weights(R_=R[:, 0:trainingTimeSteps])
+        # output weights
+        WOutput = calculate_output_weights(R_=R[:, 0:trainingTimeSteps])
 
-            result = np.zeros((outputNeurons, testTimeSteps))
+        result = np.zeros((outputNeurons, testTimeSteps))
 
-            # testing
-            n = 0
-            for t in range(trainingTimeSteps - 1, trainingTimeSteps + testTimeSteps - 1):
-                # predict
-                stepResult = np.dot(WOutput, R[:, t])
-                b = np.zeros((N, 2))
-                b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
-                b[:, 1] = np.dot(WInput, stepResult).T.reshape(N, )
+        # testing
+        n = 0
+        for t in range(trainingTimeSteps - 1, trainingTimeSteps + testTimeSteps - 1):
+            # predict
+            stepResult = np.dot(WOutput, R[:, t])
+            b = np.zeros((N, 2))
+            b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+            b[:, 1] = np.dot(WInput, stepResult).T.reshape(N, )
 
-                # update
-                R[:, t + 1] = np.tanh(np.sum(b, axis=1))
-                result[:, n] = stepResult
-                n += 1
+            # update
+            R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+            result[:, n] = stepResult
+            n += 1
 
-                # plot 1D
-                ax = fig.add_subplot(111, projection='3d')
-                lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
-                ax.plot3D(testData[0, :], testData[1, :], testData[2, :], color='blue')
-                ax.plot3D(result[0, :], result[1, :], result[2, :], color='orange')
-                plt.title(f'')
+            # plot 1D
+            # ax = fig.add_subplot(111, projection='3d')
+            # lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
+            # ax.plot3D(testData[0, :], testData[1, :], testData[2, :], color='blue')
+            # ax.plot3D(result[0, :], result[1, :], result[2, :], color='orange')
+            # plt.title(f'')
 
 
 
