@@ -4,11 +4,13 @@ from numpy.linalg import inv
 from scipy.integrate import RK45
 
 # parameters
-N = 500  # reservoir neurons
-WInputVariance = 0.02
-WVariance = 2 / N
-k = 0.1  # ridge parameter
+N = 1800  # reservoir neurons
+WInputVariance = 0.002
+WVariance = 1.2 / N
+k = 0.01  # ridge parameter
 tDelta = 0.02
+tMax = 50
+runs = 50
 
 
 # Runge-Kutta
@@ -25,29 +27,29 @@ def lorenz(t, y):
 
 def data_generator(y0, t0=0.0, t_max=50, step=0.02, plot=False):
     # initial transit
-    n = int(t_max/step)
-    sol = RK45(lorenz, t0, y0, t_bound=n, max_step=step)
-    for i in range(n):
+    m = int(t_max/step)
+    sol = RK45(lorenz, t0, y0, t_bound=m, max_step=step)
+    for i in range(m):
         sol.step()
 
     # continue
     y0 = sol.y
-    sol = RK45(lorenz, t0, y0, t_bound=n, max_step=step)
+    sol = RK45(lorenz, t0, y0, t_bound=m, max_step=step)
     states = []
-    for i in range(n):
+    for i in range(m):
         sol.step()
         states.append(sol.y)
     states = np.array(states)
 
     # plot
-    if plot == True:
+    if plot:
         fig = plt.figure(1)
         ax = fig.add_subplot(111, projection='3d')
         ax.plot(states[:, 0], states[:, 1], states[:, 2])
         plt.draw()
         plt.show()
 
-    return states, n
+    return states
 
 
 # ridge regression
@@ -65,20 +67,22 @@ for i in range(1):
         fig = plt.figure(1)
         outputNeurons = 1
 
+        # get data
+        states = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=tMax, step=tDelta, plot=False)
+
         # loop over all 3 variables
         for x in range(3):
+            m = tMax/tDelta
+            trainingData = states[0:int(m * 0.8), x].T  # 80%
+            testData = states[int(m * 0.8):, x].T  # 20%
+            trainingTimeSteps = max(trainingData.shape)
+            testTimeSteps = max(testData.shape)
+            lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
 
             # repeat a few times
             Hs = []
             WOutputs = []
-            for r in range(10):
-
-                # get data
-                states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=tDelta, plot=False)
-                trainingData = states[0:int(n * 0.8), x].T  # 80%
-                testData = states[int(n * 0.8):, x].T  # 20%
-                trainingTimeSteps = max(trainingData.shape)
-                testTimeSteps = max(testData.shape)
+            for r in range(runs):
 
                 # initialize weights and reservoir
                 W = np.random.normal(loc=0, scale=WVariance**0.5, size=(N, N))
@@ -96,7 +100,6 @@ for i in range(1):
 
                 # output weights
                 WOutput = calculate_output_weights(R_=R[:, 0:trainingTimeSteps])
-
 
                 result = np.zeros((outputNeurons, testTimeSteps))
 
@@ -118,7 +121,7 @@ for i in range(1):
                 result = result.reshape(testTimeSteps, )
 
                 # energy function
-                H = np.mean((testData-result)**2)
+                H = np.mean((testData[:250]-result[:250])**2)
                 print(f'run {r+1} done, H: {round(H, 0)}, W_output: {round(max(WOutput), 2)}')
 
                 # store
@@ -127,15 +130,14 @@ for i in range(1):
 
 
             # plot 1D
-            lyapunovTimes = 0.906*np.linspace(0, testTimeSteps*tDelta, testTimeSteps)
             plt.subplot(3, 2, 2*(x+1)-1).plot(lyapunovTimes, testData, color='blue')
             plt.subplot(3, 2, 2*(x+1)-1).plot(lyapunovTimes, result, color='orange')
-            plt.title(f'Max W_output: {round(max(WOutput), 2)}')
+            plt.title(f'X{x+1}, Max W_output: {round(max(WOutput), 2)}')
             plt.xlabel('λt')
             plt.subplot(3, 2, 2*(x+1)).scatter(WOutputs, Hs)
-            plt.title('Energy function')
+            plt.title(f'X{x+1}, MSE as a function of log(W_output)')
             plt.xlabel('Max W_output')
-            plt.ylabel('H')
+            plt.ylabel('MSE')
             plt.xscale('log')
 
         plt.subplots_adjust(hspace=0.6)
@@ -147,11 +149,13 @@ for i in range(1):
         outputNeurons = 3
 
         # get data
-        states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=tDelta, plot=False)
-        trainingData = states[0:int(n * 0.8)].T  # 80%
-        testData = states[int(n * 0.8):].T  # 20%
+        m = tMax / tDelta
+        states = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=tMax, step=tDelta, plot=False)
+        trainingData = states[0:int(m * 0.8)].T  # 80%
+        testData = states[int(m * 0.8):].T  # 20%
         trainingTimeSteps = max(trainingData.shape)
         testTimeSteps = max(testData.shape)
+        lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
 
         # initialize weights and reservoir
         W = np.random.normal(loc=0, scale=WVariance ** 0.5, size=(N, N))
@@ -187,8 +191,7 @@ for i in range(1):
             n += 1
 
             # plot 1D
-            # ax = fig.add_subplot(111, projection='3d')
-            # lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
+            #  = fig.add_subplot(111, projection='3d')
             # ax.plot3D(testData[0, :], testData[1, :], testData[2, :], color='blue')
             # ax.plot3D(result[0, :], result[1, :], result[2, :], color='orange')
             # plt.title(f'')
