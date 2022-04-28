@@ -1,11 +1,18 @@
-from scipy.integrate import RK45
-from scipy import linalg
-import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
-import sklearn
-import random
-from sklearn.linear_model import Ridge, LinearRegression
+import matplotlib.pyplot as plt
+from numpy.linalg import inv
+import scipy
+from scipy.integrate import RK45
+
+# parameters
+N = 1800  # reservoir neurons
+WInputVariance = 0.002
+WVariance = 2 / N
+k = 0.01  # ridge parameter
+tDelta = 0.02
+tMax = 100
+runs = 1
+testPercentage = 0.9
 
 
 # Runge-Kutta
@@ -20,141 +27,206 @@ def lorenz(t, y):
     return [dx1dt, dx2dt, dx3dt]
 
 
-def data_generator(y0, t0=0.0, t_max=50, step=0.02, plot=False):
+def data_generator(y0, t0=0.0, t_max=50, step=0.02):
     # initial transit
-    n = int(t_max/step)
-    sol = RK45(lorenz, t0, y0, t_bound=n, max_step=step)
-    for i in range(n):
+    m = int(t_max/step)
+    sol = RK45(lorenz, t0, y0, t_bound=m, max_step=step)
+    for i in range(m):
         sol.step()
-
 
     # continue
     y0 = sol.y
-    sol = RK45(lorenz, t0, y0, t_bound=n, max_step=step)
+    sol = RK45(lorenz, t0, y0, t_bound=m, max_step=step)
     states = []
-    for i in range(n):
+    for i in range(m):
         sol.step()
         states.append(sol.y)
-    states = pd.DataFrame(states)
-
-    # plot
-    if plot == True:
-        fig = plt.figure(1)
-        ax = fig.add_subplot(111, projection='3d')
-        ax.plot(states.loc[:, 'x1'], states.loc[:, 'x2'], states.loc[:, 'x3'])
-        plt.draw()
-        plt.show()
-
-    return states, n
+    states = np.array(states)
 
 
-#  some random starting points
-starting_points = 5
-train = pd.DataFrame()
-test = pd.DataFrame()
-for s in range(starting_points):
-    print(f'Simulation progress: {round(100 * s / starting_points, 2)}%')
-
-    if starting_points == 1:
-        states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=0.02, plot=True)
-    else:
-        states, n = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=50, step=0.02, plot=False)
-
-    # split data
-    train_ = states.loc[0:int(n * 0.8) - 1]  # 80%
-    test_ = states.loc[int(n * 0.8):]  # 20%
-
-    # append
-    train = pd.concat([train, train_])
-    test = pd.concat([test, test_])
-
-# plt.figure(1)
-# train.hist(bins=300)
-print(train.describe())
+# ridge regression
+def calculate_output_weights(R_):
+    stopExplode = k * np.identity(N)
+    WOutput = np.dot(np.dot(trainingData, R_.T), inv(np.dot(R_, R_.T) + stopExplode))
+    return WOutput
 
 
-# normalize
-train_mean = train.mean()
-train_std = train.std()
-train_normalized = (train - train_mean) / train_std
-test_normalized = (test - train_mean) / train_std
-# train = (train-train.min())/(train.max()-train.min())  # min-max
-# test = (test-test.min())/(test.max()-test.min())  # min-max
+# 1D
+fig = plt.figure(1)
+outputNeurons = 1
+
+# get data
+states = data_generator(y0=np.random.random_sample((3,)), t0=0.0, t_max=tMax, step=tDelta)
+m = tMax/tDelta
+
+# loop over all 3 variables
+idxs = [1, 2, 3]
+for x in range(3):
+    trainingData = states[0:int(m * testPercentage), x].T  # 80%
+    testData = states[int(m * testPercentage):, x].T  # 20%
+    trainingTimeSteps = max(trainingData.shape)
+    testTimeSteps = max(testData.shape)
+    lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
+
+    # repeat a few times
+    MSEs = []
+    Ws = []
+    averageError = np.zeros(testTimeSteps)
+    for r in range(runs):
+
+        # initialize weights and reservoir
+        WVariance = np.random.uniform(low=1, high=4) / N
+        W = np.random.normal(loc=0, scale=WVariance**0.5, size=(N, N))
+        # W = np.random.uniform(low=-1, high=1, size=(N, N))
+        WInput = np.random.normal(loc=0, scale=WInputVariance**0.5, size=(N, outputNeurons))
+        # WInput = np.random.uniform(low=-0.1, high=0.1, size=(N, outputNeurons))
+        R = np.zeros((N, trainingTimeSteps+testTimeSteps))  # reservoir
+
+        # feed training data
+        for t in range(trainingTimeSteps-1):
+            b = np.zeros((N, 2))  # local field b
+            b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+            b[:, 1] = np.dot(WInput, trainingData[t]).T.reshape(N, )
+
+            # update
+            R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+
+        # output weights
+        WOutput = calculate_output_weights(R_=R[:, 0:trainingTimeSteps])
+
+        result = np.zeros((outputNeurons, testTimeSteps))
+
+        # testing
+        n = 0
+        for t in range(trainingTimeSteps-1, trainingTimeSteps+testTimeSteps-1):
+
+            # predict
+            stepResult = np.dot(WOutput, R[:, t])
+            b = np.zeros((N, 2))
+            b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+            b[:, 1] = np.dot(WInput, stepResult).T.reshape(N, )
+
+            # update
+            R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+            result[:, n] = stepResult
+            n += 1
+
+        result = result.reshape(testTimeSteps, )
+
+        # MSE
+        MSE = np.mean((testData-result)**2)
+        singularValues = scipy.linalg.svdvals(W)
+        averageError += (1 / runs) * (abs(testData - result))
+        print(f'run {r+1} done, MSE: {round(MSE, 2)}, W: {round(singularValues[0], 2)}')
+
+        # store
+        MSEs.append(MSE)
+        Ws.append(singularValues[0])
+        averageError += (1 / runs) * (abs(testData - result))
 
 
-# create weight matrices
-def init_weights(n_in, n_out, density, connectivity):
-    r = -(connectivity - 1) + connectivity * np.random.rand(n_in, n_out)
-    W = np.random.rand(n_in, n_out) < density
+    # plot 1D
+    plt.subplot(3, 3, idxs[0]).plot(lyapunovTimes, testData, color='blue')
+    plt.subplot(3, 3, idxs[0]).plot(lyapunovTimes, result, color='orange')
+    plt.title(f'X{x+1} vs λt, Max singular W: {round(singularValues[0], 2)}')
+    plt.xlabel('λt')
+    plt.ylabel('Max singular W')
+    plt.subplot(3, 3, idxs[1]).scatter(Ws, MSEs)
+    plt.title('MSE vs log(W)')
+    plt.xlabel('Max W')
+    plt.ylabel('MSE')
+    plt.ylim([0, 300])
+    plt.xscale('log')
+    plt.subplot(3, 3, idxs[2]).plot(lyapunovTimes, averageError)
+    plt.title('Average error vs λt')
+    plt.xlabel('λt')
+    plt.ylabel('Error')
+    plt.ylim([0, 60])
 
-    return np.multiply(W, r)
+    idxs[0] += 3
+    idxs[1] += 3
+    idxs[2] += 3
 
-reservoir_size = 400
-density = 0.08
-connectivity = 3
-leak = 0.05
-n_inputs = n_outputs = train.shape[1]
-
-class layer:
-    def __init__(self, n_reservoir, n_in, n_out, density, connectivity, leaky_rate=None):
-        self.W_in = -.1 + .2 * np.random.rand(n_in, n_reservoir)
-        self.W = init_weights(n_reservoir, n_reservoir, density, connectivity)
-        scale = 1 / self.W.max()
-        self.W = self.W / scale
-
-        self.x = np.zeros(n_reservoir).reshape(n_reservoir, 1)
-        self.a = leaky_rate
-
-    def update(self, u):
-
-        recursion = np.dot(self.W, self.x)
-        if len(u.shape) == 1:
-            inward = np.dot(self.W_in.T, np.expand_dims(u, 1))
-        else:
-            inward = np.dot(self.W_in.T, u)
-
-        if not self.a is None:
-            recursion = self.a * recursion
-            inward = (1 - self.a) * inward
-
-        self.x = np.tanh(recursion + inward)
+plt.subplots_adjust(hspace=0.6)
 
 
-savelayers = []
-savelayers.append(layer(reservoir_size, n_inputs, reservoir_size, density, connectivity, leak))
-savelayers.append(layer(reservoir_size, reservoir_size, n_outputs, density, connectivity, leak))
+# 3D
+fig = plt.figure(2)
+outputNeurons = 3
 
-n_points = int(n * 0.8)
-start = 0
-stop = n_points
-# states
-R = np.zeros((starting_points*n_points, reservoir_size))
+# get data
+trainingData = states[0:int(m * testPercentage)].T  # 80%
+testData = states[int(m * testPercentage):].T  # 20%
+trainingTimeSteps = max(trainingData.shape)
+testTimeSteps = max(testData.shape)
+lyapunovTimes = 0.906 * np.linspace(0, testTimeSteps * tDelta, testTimeSteps)
+
+MSEs = []
+Ws = []
+averageError = np.zeros((outputNeurons, testTimeSteps))
+for r in range(runs):
+
+# initialize weights and reservoir
+    WVariance = np.random.uniform(low=1, high=3) / N
+    W = np.random.normal(loc=0, scale=WVariance ** 0.5, size=(N, N))
+    # W = np.random.uniform(low=-1, high=1, size=(N, N))
+    WInput = np.random.normal(loc=0, scale=WInputVariance ** 0.5, size=(N, outputNeurons))
+    # WInput = np.random.uniform(low=-0.1, high=0.1, size=(N, outputNeurons))
+    R = np.zeros((N, trainingTimeSteps + testTimeSteps))  # reservoir
+
+    # feed training data
+    for t in range(trainingTimeSteps - 1):
+        b = np.zeros((N, 2))  # local field b
+        b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+        b[:, 1] = np.dot(WInput, trainingData[:, t]).T.reshape(N, )
+
+        # update
+        R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+
+    # output weights
+    WOutput = calculate_output_weights(R_=R[:, 0:trainingTimeSteps])
+
+    result = np.zeros((outputNeurons, testTimeSteps))
+
+    # testing
+    n = 0
+    for t in range(trainingTimeSteps - 1, trainingTimeSteps + testTimeSteps - 1):
+        # predict
+        stepResult = np.dot(WOutput, R[:, t])
+        b = np.zeros((N, 2))
+        b[:, 0] = np.dot(R[:, t].reshape(1, N), W).T.reshape(N, )
+        b[:, 1] = np.dot(WInput, stepResult).T.reshape(N, )
+
+        # update
+        R[:, t + 1] = np.tanh(np.sum(b, axis=1))
+        result[:, n] = stepResult
+        n += 1
 
 
-for i in range(starting_points*n_points):
-    print(f'Training progress: {round(100*i/(starting_points*n_points), 2)}%')
-    if i % n_points == 0:
-        layers = savelayers
+    # MSE
+    MSE = np.mean((testData - result) ** 2)
+    singularValues = scipy.linalg.svdvals(W)
+    averageError += (1/runs)*(abs(testData-result))
+    print(f'3D run {r + 1} done, MSE: {round(MSE, 2)}, W: {round(singularValues[0], 2)}')
 
-    v = train_normalized.iloc[i]
-    layers[0].update(v)
-    layers[1].update(layers[0].x)
-    R[i, :] = layers[1].x.reshape(reservoir_size,)
-
-
-# output weights
-model1 = Ridge(alpha=0.1).fit(R, train.to_numpy()[:, 0].reshape(-1, 1))
-model2 = Ridge(alpha=0.1).fit(R, train.to_numpy()[:, 1].reshape(-1, 1))
-model3 = Ridge(alpha=0.1).fit(R, train.to_numpy()[:, 2].reshape(-1, 1))
-
-mse1 = np.mean((model1.predict(R)- train.to_numpy()[:, 0].reshape(-1, 1))**2)
-mse2 = np.mean((model2.predict(R)- train.to_numpy()[:, 1].reshape(-1, 1))**2)
-mse3 = np.mean((model3.predict(R)- train.to_numpy()[:, 2].reshape(-1, 1))**2)
-
-print(mse1)
-print(mse2)
-print(mse3)
+    # store
+    MSEs.append(MSE)
+    Ws.append(singularValues[0])
 
 
+plt.subplot(1, 2, 1).scatter(Ws, MSEs)
+plt.title('MSE vs log(W) 3D')
+plt.xlabel('log(W)')
+plt.ylabel('MSE')
+plt.ylim([0, 300])
+plt.xscale('log')
+plt.subplot(1, 2, 2).plot(lyapunovTimes, averageError[0, :], label='X1')
+plt.subplot(1, 2, 2).plot(lyapunovTimes, averageError[1, :], label='X2')
+plt.subplot(1, 2, 2).plot(lyapunovTimes, averageError[2, :], label='X3')
+plt.title('Average error vs λt')
+plt.xlabel('λt')
+plt.ylabel('Error')
+plt.ylim([0, 30])
+plt.legend()
 
-
+plt.show()
