@@ -29,6 +29,12 @@ class TQAgent:
         # 'len(gameboard.tiles)' number of different tiles
         # 'self.episode_count' the total number of episodes in the training
 
+        n_state = self.gameboard.N_row * self.gameboard.N_col + len(gameboard.tiles)
+        self.state = np.zeros(n_state)
+        self.actions = {'horizontal_0': 0, 'horizontal_1': 1, 'horizontal_2': 2, '90': 3, '180': 4, '270': 5, 'drop': 6}
+        self.Q = np.zeros((2**n_state, len(self.actions)))  # (s, a)
+        self.rewardStorage = np.zeros(self.episode_count)
+
     def fn_load_strategy(self,strategy_file):
         pass
         # TO BE COMPLETED BY STUDENT
@@ -99,6 +105,7 @@ class TQAgent:
             # TO BE COMPLETED BY STUDENT
             # Here you should write line(s) to copy the old state into the variable 'old_state' which is later passed to fn_reinforce()
 
+
             # Drop the tile on the game board
             reward=self.gameboard.fn_drop()
             # TO BE COMPLETED BY STUDENT
@@ -139,6 +146,15 @@ class TDQNAgent:
         # 'self.alpha' the learning rate for stochastic gradient descent
         # 'self.episode_count' the total number of episodes in the training
         # 'self.replay_buffer_size' the number of quadruplets stored in the experience replay buffer
+
+        print(len(gameboard.tiles))
+        print(gameboard.N_row)
+        print(gameboard.N_col)
+        self.bajs = np.zeros((self.gameboard.N_row * self.gameboard.N_col + len(gameboard.tiles),))
+        self.state = np.zeros((gameboard.N_row, gameboard.N_col))
+        self.actions = {'left': 0, 'right': 1, 'down': 2, 'turn left': 3, 'turn right': 4, 'hold': 5, 'soft drop': 6, 'hard drop': 7}
+        #self.Q = np.zeros((self.))# (s, a)
+
 
     def fn_load_strategy(self,strategy_file):
         pass
