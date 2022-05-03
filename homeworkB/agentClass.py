@@ -32,7 +32,7 @@ class TQAgent:
         # 'self.episode_count' the total number of episodes in the training
 
         n_state = self.gameboard.N_row * self.gameboard.N_col + len(gameboard.tiles)
-        self.state = np.concatenate([np.ones(n_state-len(gameboard.tiles))*-1, np.zeros(len(gameboard.tiles))])
+        self.state = np.ones(n_state)*-1
 
         #  [col, orientation]
         self.actions = np.array(
@@ -48,10 +48,10 @@ class TQAgent:
                 [2, 3]
             ]
         )
-        self.Q = np.zeros((2**n_state, len(self.actions)+1))  # (s, a+ID)
-        self.rewardStorage = np.zeros(self.episode_count)
-        self.QIndex = 0
-        self.ID = 0
+        self.Q = np.zeros((2**n_state, len(self.actions)))  # (s, a)
+        self.IDs = np.chararray(shape=(2 ** n_state), itemsize=64)
+        self.reward_tots = np.zeros(self.episode_count)
+        self.current_row = 0
         self.action = 0
 
 
@@ -77,7 +77,14 @@ class TQAgent:
         self.state[-len(self.gameboard.tiles):] = -1
         self.state[-self.gameboard.cur_tile_type] = 1
         self.state[:-4] = np.ndarray.flatten(self.gameboard.board)
-        self.ID = hashlib.sha256(self.state).hexdigest().upper()
+        id = hashlib.sha256(self.state).hexdigest().upper()
+
+
+        if id not in self.IDs.decode():  # new state
+            self.IDs[self.current_row] = id
+            self.current_row += 1
+            if self.current_row == 5:
+                print(self.current_row)
 
 
     def fn_select_action(self):
@@ -126,16 +133,9 @@ class TQAgent:
 
         old_action = self.action
 
-        self.Q[QIndex, old_action] = self.Q[old_state, old_action] + self.alpha * (
-                    reward + np.max(self.Q[self.QIndex, :]) - self.Q[old_state, old_action])
+        self.Q[old_state, old_action] = self.Q[old_state, old_action] + self.alpha * (
+                    reward + np.max(self.Q[self.current_row, :]) - self.Q[old_state, old_action])
 
-        '''
-        if self.ID not in self.Q[:, -1]:
-            self.Q[self.QIndex, -1] = self.ID
-
-        self.Q[self.QIndex, action] = 10000
-        self.QIndex += 1
-        '''
 
     def fn_turn(self):
         if self.gameboard.gameover:
@@ -147,7 +147,7 @@ class TQAgent:
                 if self.episode in saveEpisodes:
                     # TO BE COMPLETED BY STUDENT
                     # Here you can save the rewards and the Q-table to data files for plotting of the rewards and the Q-table can be used to test how the agent plays
-                    np.savetxt(f'rewards{self.episode}.csv', self.rewardStorage)
+                    np.savetxt(f'rewards{self.episode}.csv', self.reward_tots)
             if self.episode>=self.episode_count:
                 raise SystemExit(0)
             else:
@@ -157,14 +157,16 @@ class TQAgent:
             self.fn_select_action()
             # TO BE COMPLETED BY STUDENT
             # Here you should write line(s) to copy the old state into the variable 'old_state' which is later passed to fn_reinforce()
-            old_state = self.state
+            id = hashlib.sha256(self.state).hexdigest().upper()
+            cond = self.IDs.decode() == id
+            old_state = np.where(self.IDs.decode() == id)
 
 
             # Drop the tile on the game board
             reward=self.gameboard.fn_drop()
             # TO BE COMPLETED BY STUDENT
             # Here you should write line(s) to add the current reward to the total reward for the current episode, so you can save it to disk later
-            self.rewardStorage[self.episode] += reward
+            self.reward_tots[self.episode] += reward
 
             # Read the new state
             self.fn_read_state()
