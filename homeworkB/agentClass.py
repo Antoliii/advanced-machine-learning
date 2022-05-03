@@ -2,6 +2,8 @@ import numpy as np
 import random
 import math
 import h5py
+import hashlib
+import itertools
 
 # This file provides the skeleton structure for the classes TQAgent and TDQNAgent to be completed by you, the student.
 # Locations starting with # TO BE COMPLETED BY STUDENT indicates missing code that should be written by you.
@@ -30,18 +32,19 @@ class TQAgent:
         # 'self.episode_count' the total number of episodes in the training
 
         n_state = self.gameboard.N_row * self.gameboard.N_col + len(gameboard.tiles)
-        self.state = np.zeros(n_state)
-        self.actions = {'horizontal_0': 0, 'horizontal_1': 1, 'horizontal_2': 2, '90': 3, '180': 4, '270': 5, 'drop': 6}
-        self.Q = np.zeros((2**n_state, len(self.actions)))  # (s, a)
+        self.state = np.concatenate([np.ones(n_state-len(gameboard.tiles))*-1, np.zeros(len(gameboard.tiles))])
+        self.actions = np.zeros(6)
+        self.Q = np.zeros((2**n_state, len(self.actions)+2))  # (s, a+ID+Q)
         self.rewardStorage = np.zeros(self.episode_count)
+        self.QIndex = 0
+
 
     def fn_load_strategy(self,strategy_file):
-        pass
+        self.Q = strategy_file
         # TO BE COMPLETED BY STUDENT
         # Here you can load the Q-table (to Q-table of self) from the input parameter strategy_file (used to test how the agent plays)
 
     def fn_read_state(self):
-        pass
         # TO BE COMPLETED BY STUDENT
         # This function should be written by you
         # Instructions:
@@ -55,8 +58,15 @@ class TQAgent:
         # 'self.gameboard.board[index_row,index_col]' table indicating if row 'index_row' and column 'index_col' is occupied (+1) or free (-1)
         # 'self.gameboard.cur_tile_type' identifier of the current tile that should be placed on the game board (integer between 0 and len(self.gameboard.tiles))
 
+        self.state[-len(self.gameboard.tiles):] = -1
+        self.state[-self.gameboard.cur_tile_type] = 1
+        self.state[:-self.gameboard.cur_tile_type] = np.flatten(self.gameboard.board)
+        id = hashlib.sha256(self.state).hexdigest().upper()
+        self.Q[self.QIndex, -1] = id
+        self.QIndex += 1
+
+
     def fn_select_action(self):
-        pass
         # TO BE COMPLETED BY STUDENT
         # This function should be written by you
         # Instructions:
@@ -72,6 +82,45 @@ class TQAgent:
         # The input argument 'tile_orientation' contains the number of 90 degree rotations of the tile (0 < tile_orientation < # of non-degenerate rotations)
         # The function returns 1 if the action is not valid and 0 otherwise
         # You can use this function to map out which actions are valid or not
+
+        if np.random.rand() < self.epsilon:
+            tile_x = random.randint(low=0, high=3)
+            tile_orientation = random.randint(low=1, high=4)
+            while self.gameboard.fn_move(tile_x, tile_orientation):
+                continue
+            self.actions[:] = -1
+            self.actions[tile_x] = 1
+            self.actions[tile_orientation+2] = 1
+
+        else:
+            m = np.max(self.Q[:-1, :])
+
+
+            while (not done):
+
+
+
+                self.current_action_idx = np.where(self.Q_table[index, :] == np.max(self.Q_table[index, :]))[0]
+                # print(np.where(self.Q_table[index, :] == np.max(self.Q_table[index, :]))[0])
+                # print("WHAT")
+                if len(self.current_action_idx) > 1:
+                    self.current_action_idx = self.current_action_idx[
+                        np.random.randint(0, len(self.current_action_idx))]
+                else:
+                    self.current_action_idx = self.current_action_idx[0]
+
+                move = self.gameboard.fn_move(self.actions[self.current_action_idx][0],
+                                              self.actions[self.current_action_idx][1])
+
+                if move == 1:
+                    self.Q_table[index, self.current_action_idx] = - np.inf
+                else:
+                    done = True
+
+
+
+
+
     
     def fn_reinforce(self,old_state,reward):
         pass
