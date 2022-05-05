@@ -16,9 +16,9 @@ human_player=0
 human_player=0
 
 # Choose parameter sets for different tasks
-param_set=PARAM_TASK1a
+#param_set=PARAM_TASK1a
 #param_set=PARAM_TASK1b
-#param_set=PARAM_TASK1c
+param_set=PARAM_TASK1c
 #param_set=PARAM_TASK1d
 #param_set=PARAM_TASK2a
 #param_set=PARAM_TASK2b
@@ -30,6 +30,8 @@ if param_set==PARAM_TASK1a:
 elif param_set==PARAM_TASK1b:
     strategy_file=''
 elif param_set==PARAM_TASK1c:
+    strategy_file=''
+elif param_set==PARAM_TASK1d:
     strategy_file=''
 elif param_set==PARAM_TASK2a:
     strategy_file=''
@@ -72,7 +74,7 @@ if param_set==PARAM_TASK1a:
     episode_count=1000
 
     if (not human_player) or evaluate_agent:
-        agent=agentClass.TQAgent(alpha,epsilon,episode_count)
+        agent=agentClass.TQAgent(alpha,epsilon,episode_count,file_name='A')
 elif param_set==PARAM_TASK1b:
     N_row=4
     N_col=4
@@ -85,7 +87,7 @@ elif param_set==PARAM_TASK1b:
     episode_count=10000
 
     if (not human_player) or evaluate_agent:
-        agent=agentClass.TQAgent(alpha,epsilon,episode_count)
+        agent=agentClass.TQAgent(alpha,epsilon,episode_count,file_name='B')
 elif param_set==PARAM_TASK1c:
     N_row=4
     N_col=4
@@ -98,7 +100,7 @@ elif param_set==PARAM_TASK1c:
     episode_count=200000
 
     if (not human_player) or evaluate_agent:
-        agent=agentClass.TQAgent(alpha,epsilon,episode_count)
+        agent=agentClass.TQAgent(alpha,epsilon,episode_count,file_name='C')
 elif param_set==PARAM_TASK1d:
     N_row=8
     N_col=8
@@ -111,7 +113,7 @@ elif param_set==PARAM_TASK1d:
     episode_count=200000
 
     if (not human_player) or evaluate_agent:
-        agent=agentClass.TQAgent(alpha,epsilon,episode_count)
+        agent=agentClass.TQAgent(alpha,epsilon,episode_count,file_name='no')
 elif param_set==PARAM_TASK2a:
     N_row=4
     N_col=4
