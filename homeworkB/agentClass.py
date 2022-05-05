@@ -78,52 +78,40 @@ class TQAgent:
             self.Q_row = cond[cond].index.values[0]
 
     def fn_select_action(self):
-
-        index = self.Q_row
-
-        self.current_action_idx = None
-
-        r = np.random.uniform(0, 1)
-
-        done = False
-
-        if r < self.epsilon:
-            while (not done):
-                self.current_action_idx = np.random.randint(0, len(self.actions))
-                move = self.gameboard.fn_move(self.actions[self.current_action_idx][0],
-                                              self.actions[self.current_action_idx][1])
-                if move == 0:
-                    done = True
+        if np.random.rand() < self.epsilon:
+            print('finding random action..')
+            for i in range(100):
+                self.Q_col = np.random.randint(0, len(self.actions))
+                tile_x = self.actions[self.Q_col][0]
+                tile_orientation = self.actions[self.Q_col][1]
+                if not self.gameboard.fn_move(tile_x, tile_orientation):
+                   break
+                elif i == 99:
+                    print('FAILED')
+                    break
         else:
-            while (not done):
-                self.current_action_idx = np.where(self.Q[index, :] == np.max(self.Q[index, :]))[0]
-                if len(self.current_action_idx) > 1:
-                    self.current_action_idx = self.current_action_idx[
-                        np.random.randint(0, len(self.current_action_idx))]
+            for i in range(100):
+                self.Q_col = np.where(self.Q[self.Q_row, :] == np.max(self.Q[self.Q_row, :]))[0]
+                self.Q_col = self.Q_col[np.random.randint(0, len(self.Q_col))]
+                tile_x = self.actions[self.Q_col][0]
+                tile_orientation = self.actions[self.Q_col][1]
+                if not self.gameboard.fn_move(tile_x, tile_orientation):
+                    break
+                elif i == 99:
+                    print('FAILED')
+                    break
                 else:
-                    self.current_action_idx = self.current_action_idx[0]
-
-                move = self.gameboard.fn_move(self.actions[self.current_action_idx][0],
-                                              self.actions[self.current_action_idx][1])
-
-                if move == 1:
-                    self.Q[index, self.current_action_idx] = - np.inf
-                else:
-                    done = True
+                    self.Q[self.Q_row, self.Q_col] = - np.inf  # punish
 
     def fn_reinforce(self, old_state, reward):
-        old_action = self.current_action_idx
-
-        self.Q[old_state, old_action] = self.Q[old_state, old_action] + self.alpha * (
-                reward + np.max(self.Q[self.Q_row, :]) - self.Q[old_state, old_action])
+        self.Q[old_state, self.Q_col] = self.Q[old_state, self.Q_col] + self.alpha * (
+                reward + np.max(self.Q[self.Q_row, :]) - self.Q[old_state, self.Q_col])
 
 
     def fn_turn(self):
         if self.gameboard.gameover:
             #print(self.episode)
             self.episode += 1
-            if self.episode == 900:
-                print('bajs')
             if self.episode % 100 == 0:
                 print('episode ' + str(self.episode) + '/' + str(self.episode_count) + ' (reward: ',
                       str(np.sum(self.reward_tots[range(self.episode - 100, self.episode)]/100)), ')')
