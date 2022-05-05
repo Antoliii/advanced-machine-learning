@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import random
 import math
 import h5py
 import hashlib
@@ -48,10 +47,10 @@ class TQAgent:
                 [3, 3]
             ]
         )
-        self.Q = np.zeros((2 ** n_state, len(self.actions)))  # (s, a)
+        self.Q = np.zeros((1000, len(self.actions)))  # (s, a)
         # self.IDs = np.chararray(shape=(2 ** n_state), itemsize=64)
-        # self.IDs = pd.Series([''] * (2 ** n_state))
         self.IDs = pd.Series([''] * 1000)
+        # self.IDs = np.chararray(shape=(1000), itemsize=64)
         self.reward_tots = np.zeros(self.episode_count)
         self.Q_row = 0
         self.Q_col = 0
@@ -66,8 +65,8 @@ class TQAgent:
         self.state[-len(self.gameboard.tiles):] = -1
         self.state[-self.gameboard.cur_tile_type] = 1
         self.state[:-4] = np.ndarray.flatten(self.gameboard.board)
-        # id = hashlib.md5(self.state).hexdigest()
-        id = str(self.state.tobytes())
+        id = hashlib.sha256(self.state).hexdigest()
+        # id = str(self.state.tobytes())
 
         if not self.IDs.isin([id]).any():  # new state
             self.IDs.iloc[self.new_row] = id
@@ -79,59 +78,52 @@ class TQAgent:
             self.Q_row = cond[cond].index.values[0]
 
     def fn_select_action(self):
-        if np.random.rand() < self.epsilon:
-            for i in range(100):
-                if i == 99:
-                    print('FAILED')
-                    break
 
-                Q_col = np.random.randint(low=0, high=16)
-                tile_x = self.actions[Q_col][0]
-                tile_orientation = self.actions[Q_col][1]
+        index = self.Q_row
 
-                if self.gameboard.fn_move(tile_x, tile_orientation) == 0:
-                    #  store action
-                    self.Q_col = Q_col
-                    break
-                else:
-                    self.Q[self.Q_row, self.Q_col] = - 1e12
+        self.current_action_idx = None
 
+        r = np.random.uniform(0, 1)
+
+        done = False
+
+        if r < self.epsilon:
+            while (not done):
+                self.current_action_idx = np.random.randint(0, len(self.actions))
+                move = self.gameboard.fn_move(self.actions[self.current_action_idx][0],
+                                              self.actions[self.current_action_idx][1])
+                if move == 0:
+                    done = True
         else:
-            for i in range(100):
-                if i == 99:
-                    # print('FAILED')
-                    break
-
-                Q_col = np.where(self.Q[self.Q_row, :] == np.max(self.Q[self.Q_row, :]))[0]
-                if len(Q_col) > 1:
-                    n = np.random.randint(low=0, high=len(Q_col))
-                    Q_col = Q_col[n]
+            while (not done):
+                self.current_action_idx = np.where(self.Q[index, :] == np.max(self.Q[index, :]))[0]
+                if len(self.current_action_idx) > 1:
+                    self.current_action_idx = self.current_action_idx[
+                        np.random.randint(0, len(self.current_action_idx))]
                 else:
-                    Q_col = Q_col[0]
+                    self.current_action_idx = self.current_action_idx[0]
 
-                tile_x = self.actions[Q_col][0]
-                tile_orientation = self.actions[Q_col][1]
+                move = self.gameboard.fn_move(self.actions[self.current_action_idx][0],
+                                              self.actions[self.current_action_idx][1])
 
-                if self.gameboard.fn_move(tile_x, tile_orientation) == 0:
-                    #  store action
-                    self.Q_col = Q_col
-                    break
+                if move == 1:
+                    self.Q[index, self.current_action_idx] = - np.inf
                 else:
-                    self.Q[self.Q_row, self.Q_col] = - 1e12
-
+                    done = True
 
     def fn_reinforce(self, old_state, reward):
-        old_action = self.Q_col
+        old_action = self.current_action_idx
 
         self.Q[old_state, old_action] = self.Q[old_state, old_action] + self.alpha * (
                 reward + np.max(self.Q[self.Q_row, :]) - self.Q[old_state, old_action])
 
-        # print(f'old state {old_state}, old action {old_action}, current state idx {self.Q_row}, reward {reward}')
 
     def fn_turn(self):
         if self.gameboard.gameover:
             #print(self.episode)
             self.episode += 1
+            if self.episode == 900:
+                print('bajs')
             if self.episode % 100 == 0:
                 print('episode ' + str(self.episode) + '/' + str(self.episode_count) + ' (reward: ',
                       str(np.sum(self.reward_tots[range(self.episode - 100, self.episode)]/100)), ')')
