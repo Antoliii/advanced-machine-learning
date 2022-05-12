@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE
 
 def visualize(h, color):
     z = TSNE(n_components=2).fit_transform(h.detach().cpu().numpy())
-    plt.scatter(z[:, 0], z[:, 1], s=50, c=color, cmap="Set2")
+    plt.scatter(z[:, 0], z[:, 1], s=20, c=color, cmap='Set2')
     plt.show()
 
 
@@ -105,38 +105,55 @@ def test(model_, semi_supervised):
     predicts = out.argmax(dim=1)
     test_correct = predicts[data.test_mask] == data.y[data.test_mask]
     test_accuracy = int(test_correct.sum()) / int(data.test_mask.sum())
+    # visualize(out, color=data.y)
     return test_accuracy
 
 
 modelNN = NN(hidden_channels=16)
 modelGCN = GCN(hidden_channels=16)
-modelGAT = GAT(hidden_channels=16, heads=3, dropout=0.7)
+modelGAT = GAT(hidden_channels=16, heads=7, dropout=0.6)
 models = [modelNN, modelGCN, modelGAT]
 semiSupervised = dict(zip([modelNN, modelGCN, modelGAT], [False, True, True]))
 
 
 # early stop
+allLosses = []
+allAccuracies = []
 for model in models:
+    losses = []
     previousLoss = 1e6
     n = 0
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
     for epoch in range(1, 999):
         newLoss, model, optimizer = train(model_=model, semi_supervised=semiSupervised[model], optimizer_=optimizer)
+        losses.append(newLoss.item())
         if previousLoss <= newLoss.item():
             print(f'Model: {model.__class__.__name__}, Epoch: {epoch:03d}, Loss: {previousLoss:.4f}')
 
             # count
             n += 1
-            if n == 10:
+            if n == 20:
                 testAcc = test(model, semi_supervised=semiSupervised[model])
+                allAccuracies.append(f' {100*testAcc:.2f}%')
                 print(f'Model: {model.__class__.__name__}, Test accuracy: {100*testAcc:.2f}%\n')
                 break
         else:
             n = 0
             previousLoss = newLoss.item()
 
-#visualize(model(data.x), color=data.y)
+    allLosses.append(losses)
+
+plotLabels = ['NN', 'GCN', 'GAT']
+plt.figure(3)
+for i in range(len(allLosses)):
+    plt.plot(allLosses[i], label=plotLabels[i]+allAccuracies[i])
+plt.title('Training')
+plt.ylabel('Loss')
+plt.xlabel('Episode')
+plt.legend()
+
+plt.show()
 
 
 
