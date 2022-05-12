@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE
 
 def visualize(h, color):
     z = TSNE(n_components=2).fit_transform(h.detach().cpu().numpy())
-    plt.scatter(z[:, 0], z[:, 1], s=20, c=color, cmap='Set2')
+    plt.scatter(z[:, 0], z[:, 1], s=10, c=color, cmap='Set2')
     plt.show()
 
 
@@ -105,7 +105,7 @@ def test(model_, semi_supervised):
     predicts = out.argmax(dim=1)
     test_correct = predicts[data.test_mask] == data.y[data.test_mask]
     test_accuracy = int(test_correct.sum()) / int(data.test_mask.sum())
-    # visualize(out, color=data.y)
+    visualize(out, color=data.y)
     return test_accuracy
 
 
@@ -133,7 +133,7 @@ for model in models:
 
             # count
             n += 1
-            if n == 20:
+            if n == 10:
                 testAcc = test(model, semi_supervised=semiSupervised[model])
                 allAccuracies.append(f' {100*testAcc:.2f}%')
                 print(f'Model: {model.__class__.__name__}, Test accuracy: {100*testAcc:.2f}%\n')

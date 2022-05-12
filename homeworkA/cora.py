@@ -125,6 +125,7 @@ for model in models:
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
     losses = []
+    testAcc = 0
     for epoch in range(1, 999):
         newLoss, model, optimizer = train(model_=model, semi_supervised=semiSupervised[model], optimizer_=optimizer)
         losses.append(newLoss.item())
@@ -145,11 +146,13 @@ for model in models:
     # visualize
     if not semiSupervised[model]:
 
-        visualize(axs_=axs[r, 0], h=model(data.x), color=data.y, title_=model.__class__.__name__)
+        visualize(axs_=axs[r, 0], h=model(data.x), color=data.y,
+                  title_=f'{model.__class__.__name__} {100*testAcc:.2f}%')
         axs[r, 1].plot(losses)
         axs[r, 1].set_title('Loss')
     else:
-        visualize(axs_=axs[r, 0], h=model(data.x, data.edge_index), color=data.y, title_=model.__class__.__name__)
+        visualize(axs_=axs[r, 0], h=model(data.x, data.edge_index), color=data.y,
+                  title_=f'{model.__class__.__name__} {100*testAcc:.2f}%')
         axs[r, 1].plot(losses)
         axs[r, 1].set_title('Loss')
     r += 1
