@@ -5,13 +5,13 @@ import scipy
 from scipy.integrate import RK45
 
 # parameters
-N = 1800  # reservoir neurons
+N = 800  # reservoir neurons
 WInputVariance = 0.002
 WVariance = 2 / N
 k = 0.01  # ridge parameter
 tDelta = 0.02
 tMax = 100
-runs = 1
+runs = 5
 testPercentage = 0.9
 
 
@@ -42,6 +42,8 @@ def data_generator(y0, t0=0.0, t_max=50, step=0.02):
         sol.step()
         states.append(sol.y)
     states = np.array(states)
+    
+    return states
 
 
 # ridge regression
